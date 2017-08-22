@@ -47,6 +47,7 @@ private:
     
     IOReturn readI2C(UInt8 *values, UInt16 len);
     IOReturn writeI2C(UInt8 *values, UInt16 len);
+    IOReturn writeReadI2C(UInt8 *writeBuf, UInt16 writeLen, UInt8 *readBuf, UInt16 readLen);
     
     IOReturn fetchHIDDescriptor();
     

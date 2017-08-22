@@ -121,35 +121,57 @@ IOReturn VoodooI2CHIDDevice::getDescriptorAddress(IOACPIPlatformDevice *acpiDevi
 }
 
 IOReturn VoodooI2CHIDDevice::readI2C(UInt8 *values, UInt16 len){
-    IOLog("%s::readI2C!\n", getName());
     UInt16 flags = I2C_M_RD;
     if (this->use10BitAddressing)
         flags = I2C_M_RD | I2C_M_TEN;
     VoodooI2CControllerBusMessage msgs[] = {
         {
             .address = this->i2cAddress,
+            .buffer = values,
             .flags = flags,
             .length = (UInt16)len,
-            .buffer = values,
         },
     };
     return i2cController->transferI2C(msgs, 1);
 }
 
 IOReturn VoodooI2CHIDDevice::writeI2C(UInt8 *values, UInt16 len){
-    IOLog("%s::writeI2C!\n", getName());
     UInt16 flags = 0;
     if (this->use10BitAddressing)
         flags = I2C_M_TEN;
     VoodooI2CControllerBusMessage msgs[] = {
         {
             .address = this->i2cAddress,
+            .buffer = values,
             .flags = flags,
             .length = (UInt16)len,
-            .buffer = values,
         },
     };
     return i2cController->transferI2C(msgs, 1);
+}
+
+IOReturn VoodooI2CHIDDevice::writeReadI2C(UInt8 *writeBuf, UInt16 writeLen, UInt8 *readBuf, UInt16 readLen){
+    UInt16 readFlags = I2C_M_RD;
+    if (this->use10BitAddressing)
+        readFlags = I2C_M_RD | I2C_M_TEN;
+    UInt16 writeFlags = 0;
+    if (this->use10BitAddressing)
+        writeFlags = I2C_M_TEN;
+    VoodooI2CControllerBusMessage msgs[] = {
+        {
+            .address = this->i2cAddress,
+            .buffer = writeBuf,
+            .flags = writeFlags,
+            .length = writeLen,
+        },
+        {
+            .address = this->i2cAddress,
+            .buffer = readBuf,
+            .flags = readFlags,
+            .length = readLen,
+        }
+    };
+    return i2cController->transferI2C(msgs, 2);
 }
 
 IOReturn VoodooI2CHIDDevice::fetchHIDDescriptor(){
@@ -158,12 +180,9 @@ IOReturn VoodooI2CHIDDevice::fetchHIDDescriptor(){
     union command cmd;
     cmd.c.reg = this->HIDDescriptorAddress;
     
-    if (writeI2C(cmd.data, length) != kIOReturnSuccess)
-        return kIOReturnIOError;
+    memset((UInt8 *)&this->HIDDescriptor, 0, sizeof(i2c_hid_descr));
     
-    memset(&this->HIDDescriptor, 0, sizeof(i2c_hid_descr));
-    
-    if (readI2C((UInt8 *)&this->HIDDescriptor, sizeof(i2c_hid_descr)) != kIOReturnSuccess)
+    if (writeReadI2C(cmd.data, (UInt16)length, (UInt8 *)&this->HIDDescriptor, (UInt16)sizeof(i2c_hid_descr)) != kIOReturnSuccess)
         return kIOReturnIOError;
     
     IOLog("%s::BCD Version: 0x%x\n", getName(), this->HIDDescriptor.bcdVersion);
