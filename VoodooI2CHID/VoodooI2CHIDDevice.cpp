@@ -55,11 +55,26 @@ bool VoodooI2CHIDDevice::start(IOService *provider){
         return false;
     }
     
-    IOLog("%s::Fetching descriptor!\n", getName());
     if (fetchHIDDescriptor() != kIOReturnSuccess){
         IOLog("%s::Unable to get HID Descriptor!\n", getName());
         return false;
     }
+    
+    this->ReportDescLength = 0;
+    if (fetchReportDescriptor() != kIOReturnSuccess){
+        IOLog("%s::Unable to get Report Descriptor!\n", getName());
+        stop(provider);
+        return false;
+    }
+    
+    this->workLoop = getWorkLoop();
+    if (!this->workLoop){
+        IOLog("%s::Unable to get workloop\n", getName());
+        stop(provider);
+        return false;
+    }
+    
+    this->workLoop->retain();
     
     registerService();
     return true;
@@ -67,6 +82,13 @@ bool VoodooI2CHIDDevice::start(IOService *provider){
 
 void VoodooI2CHIDDevice::stop(IOService *provider){
     IOLog("%s::Stopping!\n", getName());
+    
+    if (this->ReportDescLength != 0){
+        IOFree(this->ReportDesc, this->ReportDescLength);
+    }
+    
+    OSSafeReleaseNULL(this->workLoop);
+    
     super::stop(provider);
 }
 
@@ -186,7 +208,36 @@ IOReturn VoodooI2CHIDDevice::fetchHIDDescriptor(){
         return kIOReturnIOError;
     
     IOLog("%s::BCD Version: 0x%x\n", getName(), this->HIDDescriptor.bcdVersion);
-    if (this->HIDDescriptor.bcdVersion == 0x0100 && this->HIDDescriptor.wHIDDescLength == sizeof(i2c_hid_descr))
+    if (this->HIDDescriptor.bcdVersion == 0x0100 && this->HIDDescriptor.wHIDDescLength == sizeof(i2c_hid_descr)){
+        setProperty("HIDDescLength", (UInt32)this->HIDDescriptor.wHIDDescLength, 32);
+        setProperty("bcdVersion", (UInt32)this->HIDDescriptor.bcdVersion, 32);
+        setProperty("ReportDescLength", (UInt32)this->HIDDescriptor.wReportDescLength, 32);
+        setProperty("ReportDescRegister", (UInt32)this->HIDDescriptor.wReportDescRegister, 32);
+        setProperty("InputRegister", (UInt32)this->HIDDescriptor.wInputRegister, 32);
+        setProperty("MaxInputLength", (UInt32)this->HIDDescriptor.wMaxInputLength, 32);
+        setProperty("OutputRegister", (UInt32)this->HIDDescriptor.wOutputRegister, 32);
+        setProperty("MaxOutputLength", (UInt32)this->HIDDescriptor.wMaxOutputLength, 32);
+        setProperty("CommandRegister", (UInt32)this->HIDDescriptor.wCommandRegister, 32);
+        setProperty("DataRegister", (UInt32)this->HIDDescriptor.wDataRegister, 32);
+        setProperty("vendorID", (UInt32)this->HIDDescriptor.wVendorID, 32);
+        setProperty("productID", (UInt32)this->HIDDescriptor.wProductID, 32);
+        setProperty("VersionID", (UInt32)this->HIDDescriptor.wVersionID, 32);
         return kIOReturnSuccess;
+    }
     return kIOReturnDeviceError;
+}
+
+IOReturn VoodooI2CHIDDevice::fetchReportDescriptor(){
+    this->ReportDescLength = this->HIDDescriptor.wReportDescLength;
+    uint8_t length = 2;
+    
+    union command cmd;
+    cmd.c.reg = this->HIDDescriptor.wReportDescRegister;
+    
+    this->ReportDesc = (UInt8 *)IOMalloc(this->ReportDescLength);
+    memset((UInt8 *)this->ReportDesc, 0, this->ReportDescLength);
+    
+    if (writeReadI2C(cmd.data, (UInt16)length, (UInt8 *)&this->HIDDescriptor, (UInt16)sizeof(i2c_hid_descr)) != kIOReturnSuccess)
+        return kIOReturnIOError;
+    return kIOReturnSuccess;
 }

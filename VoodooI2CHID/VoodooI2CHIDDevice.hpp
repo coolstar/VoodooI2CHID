@@ -37,9 +37,14 @@ private:
     VoodooI2CControllerDriver *i2cController;
     IOService *provider;
     
+    IOWorkLoop *workLoop;
+    
     UInt16 i2cAddress;
     bool use10BitAddressing;
     UInt16 HIDDescriptorAddress;
+    
+    UInt8 *ReportDesc;
+    UInt16 ReportDescLength;
     
     struct i2c_hid_descr HIDDescriptor;
     
@@ -50,6 +55,7 @@ private:
     IOReturn writeReadI2C(UInt8 *writeBuf, UInt16 writeLen, UInt8 *readBuf, UInt16 readLen);
     
     IOReturn fetchHIDDescriptor();
+    IOReturn fetchReportDescriptor();
     
 public:
     virtual bool start(IOService *provider) override;
