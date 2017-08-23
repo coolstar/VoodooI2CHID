@@ -20,7 +20,7 @@
 	<string>1</string>
 	<key>IOKitPersonalities</key>
 	<dict>
-		<key>VoodooI2CHIDDevice</key>
+		<key>Wacom Device</key>
 		<dict>
 			<key>CFBundleIdentifier</key>
 			<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
@@ -30,6 +30,20 @@
 			<dict>
 				<key>name</key>
 				<string>WCOM50FC</string>
+			</dict>
+			<key>IOProviderClass</key>
+			<string>VoodooI2CDeviceNub</string>
+		</dict>
+		<key>Elan Trackpad</key>
+		<dict>
+			<key>CFBundleIdentifier</key>
+			<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+			<key>IOClass</key>
+			<string>VoodooI2CHIDDevice</string>
+			<key>IOPropertyMatch</key>
+			<dict>
+				<key>name</key>
+				<string>ELAN0651</string>
 			</dict>
 			<key>IOProviderClass</key>
 			<string>VoodooI2CDeviceNub</string>

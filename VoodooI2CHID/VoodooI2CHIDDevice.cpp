@@ -40,7 +40,7 @@ bool VoodooI2CHIDDevice::start(IOService *provider){
     this->DeviceIsAwake = false;
     this->IsReading = true;
     
-    //PMinit();
+    PMinit();
     
     IOLog("%s::Starting!\n", getName());
     
@@ -59,7 +59,7 @@ bool VoodooI2CHIDDevice::start(IOService *provider){
     IOACPIPlatformDevice *acpiDevice = OSDynamicCast(IOACPIPlatformDevice, provider->getProperty("acpi-device"));
     if (getDescriptorAddress(acpiDevice) != kIOReturnSuccess){
         IOLog("%s::Unable to get HID Descriptor address!\n", getName());
-        //PMstop();
+        PMstop();
         return false;
     }
     
@@ -67,7 +67,7 @@ bool VoodooI2CHIDDevice::start(IOService *provider){
     
     if (fetchHIDDescriptor() != kIOReturnSuccess){
         IOLog("%s::Unable to get HID Descriptor!\n", getName());
-        //PMstop();
+        PMstop();
         return false;
     }
     
@@ -89,7 +89,7 @@ bool VoodooI2CHIDDevice::start(IOService *provider){
     
     this->workLoop->retain();
     
-    this->interruptSource = IOInterruptEventSource::interruptEventSource(this, OSMemberFunctionCast(IOInterruptEventAction, this, &VoodooI2CHIDDevice::InterruptOccured), acpiDevice);
+    this->interruptSource = IOInterruptEventSource::interruptEventSource(this, OSMemberFunctionCast(IOInterruptEventAction, this, &VoodooI2CHIDDevice::InterruptOccured), provider, 0);
     if (!this->interruptSource) {
         IOLog("%s::Unable to get interrupt source\n", getName());
         stop(provider);
@@ -115,7 +115,7 @@ bool VoodooI2CHIDDevice::start(IOService *provider){
     this->DeviceIsAwake = true;
     this->IsReading = false;
     
-/*#define kMyNumberOfStates 2
+#define kMyNumberOfStates 2
     
     static IOPMPowerState myPowerStates[kMyNumberOfStates];
     // Zero-fill the structures.
@@ -133,7 +133,7 @@ bool VoodooI2CHIDDevice::start(IOService *provider){
     
     provider->joinPMtree(this);
     
-    registerPowerDriver(this, myPowerStates, kMyNumberOfStates);*/
+    registerPowerDriver(this, myPowerStates, kMyNumberOfStates);
     return true;
 }
 
@@ -163,7 +163,7 @@ void VoodooI2CHIDDevice::stop(IOService *provider){
     
     OSSafeReleaseNULL(this->workLoop);
     
-    //PMstop();
+    PMstop();
     
     super::stop(provider);
 }
