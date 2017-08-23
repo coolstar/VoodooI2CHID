@@ -30,6 +30,7 @@ struct __attribute__((__packed__)) i2c_hid_descr {
     uint32_t reserved;
 };
 
+class VoodooI2CHIDDeviceWrapper;
 class VoodooI2CHIDDevice : public IOService
 {
     OSDeclareDefaultStructors(VoodooI2CHIDDevice);
@@ -37,16 +38,13 @@ private:
     VoodooI2CControllerDriver *i2cController;
     IOService *provider;
     
+    VoodooI2CHIDDeviceWrapper *wrapper;
+    
     IOWorkLoop *workLoop;
     
     UInt16 i2cAddress;
     bool use10BitAddressing;
     UInt16 HIDDescriptorAddress;
-    
-    UInt8 *ReportDesc;
-    UInt16 ReportDescLength;
-    
-    struct i2c_hid_descr HIDDescriptor;
     
     IOReturn getDescriptorAddress(IOACPIPlatformDevice *acpiDevice);
     
@@ -58,6 +56,11 @@ private:
     IOReturn fetchReportDescriptor();
     
 public:
+    UInt8 *ReportDesc;
+    UInt16 ReportDescLength;
+    
+    struct i2c_hid_descr HIDDescriptor;
+    
     virtual bool start(IOService *provider) override;
     virtual void stop(IOService *provider) override;
 };

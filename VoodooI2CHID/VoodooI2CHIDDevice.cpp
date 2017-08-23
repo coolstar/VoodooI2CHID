@@ -7,6 +7,7 @@
 //
 
 #include "VoodooI2CHIDDevice.hpp"
+#include "VoodooI2CHIDDeviceWrapper.hpp"
 #include <IOKit/IOLib.h>
 
 #define super IOService
@@ -76,6 +77,15 @@ bool VoodooI2CHIDDevice::start(IOService *provider){
     
     this->workLoop->retain();
     
+    this->wrapper = new VoodooI2CHIDDeviceWrapper;
+    if (this->wrapper->init()){
+        this->wrapper->attach(this);
+        this->wrapper->start(this);
+    } else {
+        this->wrapper->release();
+        this->wrapper = NULL;
+    }
+    
     registerService();
     return true;
 }
@@ -85,6 +95,12 @@ void VoodooI2CHIDDevice::stop(IOService *provider){
     
     if (this->ReportDescLength != 0){
         IOFree(this->ReportDesc, this->ReportDescLength);
+    }
+    
+    if (this->wrapper){
+        this->wrapper->terminate(kIOServiceRequired | kIOServiceSynchronous);
+        this->wrapper->release();
+        this->wrapper = NULL;
     }
     
     OSSafeReleaseNULL(this->workLoop);
@@ -228,6 +244,8 @@ IOReturn VoodooI2CHIDDevice::fetchHIDDescriptor(){
 }
 
 IOReturn VoodooI2CHIDDevice::fetchReportDescriptor(){
+    if (this->ReportDescLength != 0)
+        return kIOReturnSuccess;
     this->ReportDescLength = this->HIDDescriptor.wReportDescLength;
     uint8_t length = 2;
     
@@ -237,7 +255,7 @@ IOReturn VoodooI2CHIDDevice::fetchReportDescriptor(){
     this->ReportDesc = (UInt8 *)IOMalloc(this->ReportDescLength);
     memset((UInt8 *)this->ReportDesc, 0, this->ReportDescLength);
     
-    if (writeReadI2C(cmd.data, (UInt16)length, (UInt8 *)&this->HIDDescriptor, (UInt16)sizeof(i2c_hid_descr)) != kIOReturnSuccess)
+    if (writeReadI2C(cmd.data, (UInt16)length, (UInt8 *)this->ReportDesc, this->ReportDescLength) != kIOReturnSuccess)
         return kIOReturnIOError;
     return kIOReturnSuccess;
 }
