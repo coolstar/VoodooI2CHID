@@ -36,6 +36,12 @@ OSDefineMetaClassAndStructors(VoodooI2CHIDDevice, IOService);
 bool VoodooI2CHIDDevice::start(IOService *provider){
     if (!super::start(provider))
         return false;
+    
+    this->DeviceIsAwake = false;
+    this->IsReading = true;
+    
+    PMinit();
+    
     IOLog("%s::Starting!\n", getName());
     
     i2cController = OSDynamicCast(VoodooI2CControllerDriver, provider->getProvider());
@@ -53,11 +59,13 @@ bool VoodooI2CHIDDevice::start(IOService *provider){
     IOACPIPlatformDevice *acpiDevice = OSDynamicCast(IOACPIPlatformDevice, provider->getProperty("acpi-device"));
     if (getDescriptorAddress(acpiDevice) != kIOReturnSuccess){
         IOLog("%s::Unable to get HID Descriptor address!\n", getName());
+        PMstop();
         return false;
     }
     
     if (fetchHIDDescriptor() != kIOReturnSuccess){
         IOLog("%s::Unable to get HID Descriptor!\n", getName());
+        PMstop();
         return false;
     }
     
@@ -67,6 +75,8 @@ bool VoodooI2CHIDDevice::start(IOService *provider){
         stop(provider);
         return false;
     }
+    
+    this->IsReading = false;
     
     this->workLoop = getWorkLoop();
     if (!this->workLoop){
@@ -87,6 +97,26 @@ bool VoodooI2CHIDDevice::start(IOService *provider){
     }
     
     registerService();
+    
+#define kMyNumberOfStates 2
+    
+    static IOPMPowerState myPowerStates[kMyNumberOfStates];
+    // Zero-fill the structures.
+    bzero (myPowerStates, sizeof(myPowerStates));
+    // Fill in the information about your device's off state:
+    myPowerStates[0].version = 1;
+    myPowerStates[0].capabilityFlags = kIOPMPowerOff;
+    myPowerStates[0].outputPowerCharacter = kIOPMPowerOff;
+    myPowerStates[0].inputPowerRequirement = kIOPMPowerOff;
+    // Fill in the information about your device's on state:
+    myPowerStates[1].version = 1;
+    myPowerStates[1].capabilityFlags = kIOPMPowerOn;
+    myPowerStates[1].outputPowerCharacter = kIOPMPowerOn;
+    myPowerStates[1].inputPowerRequirement = kIOPMPowerOn;
+    
+    provider->joinPMtree(this);
+    
+    registerPowerDriver(this, myPowerStates, kMyNumberOfStates);
     return true;
 }
 
@@ -105,7 +135,40 @@ void VoodooI2CHIDDevice::stop(IOService *provider){
     
     OSSafeReleaseNULL(this->workLoop);
     
+    PMstop();
+    
     super::stop(provider);
+}
+
+IOReturn VoodooI2CHIDDevice::setPowerState(unsigned long powerState, IOService *whatDevice){
+    if (whatDevice != this)
+        return kIOReturnInvalid;
+    if (powerState == 0){
+        //Going to sleep
+        if (this->DeviceIsAwake){
+            this->DeviceIsAwake = false;
+            while (this->IsReading){
+                IOSleep(10);
+            }
+            this->IsReading = true;
+            //set_power(I2C_HID_PWR_SLEEP);
+            this->IsReading = false;
+            
+            IOLog("%s::Going to Sleep!\n", getName());
+        }
+    } else {
+        if (!this->DeviceIsAwake){
+            this->IsReading = true;
+            //reset_dev();
+            this->IsReading = false;
+            
+            this->DeviceIsAwake = true;
+            IOLog("%s::Woke up from Sleep!\n", getName());
+        } else {
+            IOLog("%s::Device already awake! Not reinitializing.\n", getName());
+        }
+    }
+    return kIOPMAckImplied;
 }
 
 IOReturn VoodooI2CHIDDevice::getDescriptorAddress(IOACPIPlatformDevice *acpiDevice){
