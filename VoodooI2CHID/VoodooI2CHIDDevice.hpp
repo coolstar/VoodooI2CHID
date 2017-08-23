@@ -46,6 +46,9 @@ private:
     bool use10BitAddressing;
     UInt16 HIDDescriptorAddress;
     
+    bool DeviceIsAwake;
+    bool IsReading;
+    
     IOReturn getDescriptorAddress(IOACPIPlatformDevice *acpiDevice);
     
     IOReturn readI2C(UInt8 *values, UInt16 len);
@@ -63,6 +66,7 @@ public:
     
     virtual bool start(IOService *provider) override;
     virtual void stop(IOService *provider) override;
+    virtual IOReturn setPowerState(unsigned long powerState, IOService *whatDevice) override;
 };
 
 #endif /* VoodooI2CHIDDevice_hpp */
