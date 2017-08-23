@@ -40,7 +40,7 @@ bool VoodooI2CHIDDevice::start(IOService *provider){
     this->DeviceIsAwake = false;
     this->IsReading = true;
     
-    PMinit();
+    //PMinit();
     
     IOLog("%s::Starting!\n", getName());
     
@@ -59,13 +59,15 @@ bool VoodooI2CHIDDevice::start(IOService *provider){
     IOACPIPlatformDevice *acpiDevice = OSDynamicCast(IOACPIPlatformDevice, provider->getProperty("acpi-device"));
     if (getDescriptorAddress(acpiDevice) != kIOReturnSuccess){
         IOLog("%s::Unable to get HID Descriptor address!\n", getName());
-        PMstop();
+        //PMstop();
         return false;
     }
     
+    IOLog("%s::Got HID Descriptor Address!\n", getName());
+    
     if (fetchHIDDescriptor() != kIOReturnSuccess){
         IOLog("%s::Unable to get HID Descriptor!\n", getName());
-        PMstop();
+        //PMstop();
         return false;
     }
     
@@ -87,6 +89,16 @@ bool VoodooI2CHIDDevice::start(IOService *provider){
     
     this->workLoop->retain();
     
+    this->interruptSource = IOInterruptEventSource::interruptEventSource(this, OSMemberFunctionCast(IOInterruptEventAction, this, &VoodooI2CHIDDevice::InterruptOccured), acpiDevice);
+    if (!this->interruptSource) {
+        IOLog("%s::Unable to get interrupt source\n", getName());
+        stop(provider);
+        return false;
+    }
+    
+    this->workLoop->addEventSource(this->interruptSource);
+    this->interruptSource->enable();
+    
     this->wrapper = new VoodooI2CHIDDeviceWrapper;
     if (this->wrapper->init()){
         this->wrapper->attach(this);
@@ -98,7 +110,12 @@ bool VoodooI2CHIDDevice::start(IOService *provider){
     
     registerService();
     
-#define kMyNumberOfStates 2
+    reset_dev();
+    
+    this->DeviceIsAwake = true;
+    this->IsReading = false;
+    
+/*#define kMyNumberOfStates 2
     
     static IOPMPowerState myPowerStates[kMyNumberOfStates];
     // Zero-fill the structures.
@@ -116,15 +133,26 @@ bool VoodooI2CHIDDevice::start(IOService *provider){
     
     provider->joinPMtree(this);
     
-    registerPowerDriver(this, myPowerStates, kMyNumberOfStates);
+    registerPowerDriver(this, myPowerStates, kMyNumberOfStates);*/
     return true;
 }
 
 void VoodooI2CHIDDevice::stop(IOService *provider){
     IOLog("%s::Stopping!\n", getName());
     
+    this->DeviceIsAwake = false;
+    IOSleep(1);
+    
     if (this->ReportDescLength != 0){
         IOFree(this->ReportDesc, this->ReportDescLength);
+    }
+    
+    if (this->interruptSource){
+        this->interruptSource->disable();
+        this->workLoop->removeEventSource(this->interruptSource);
+        
+        this->interruptSource->release();
+        this->interruptSource = NULL;
     }
     
     if (this->wrapper){
@@ -135,7 +163,7 @@ void VoodooI2CHIDDevice::stop(IOService *provider){
     
     OSSafeReleaseNULL(this->workLoop);
     
-    PMstop();
+    //PMstop();
     
     super::stop(provider);
 }
@@ -151,7 +179,7 @@ IOReturn VoodooI2CHIDDevice::setPowerState(unsigned long powerState, IOService *
                 IOSleep(10);
             }
             this->IsReading = true;
-            //set_power(I2C_HID_PWR_SLEEP);
+            set_power(I2C_HID_PWR_SLEEP);
             this->IsReading = false;
             
             IOLog("%s::Going to Sleep!\n", getName());
@@ -159,7 +187,7 @@ IOReturn VoodooI2CHIDDevice::setPowerState(unsigned long powerState, IOService *
     } else {
         if (!this->DeviceIsAwake){
             this->IsReading = true;
-            //reset_dev();
+            reset_dev();
             this->IsReading = false;
             
             this->DeviceIsAwake = true;
@@ -321,4 +349,88 @@ IOReturn VoodooI2CHIDDevice::fetchReportDescriptor(){
     if (writeReadI2C(cmd.data, (UInt16)length, (UInt8 *)this->ReportDesc, this->ReportDescLength) != kIOReturnSuccess)
         return kIOReturnIOError;
     return kIOReturnSuccess;
+}
+
+IOReturn VoodooI2CHIDDevice::set_power(int power_state){
+    uint8_t length = 4;
+    
+    union command cmd;
+    cmd.c.reg = this->HIDDescriptor.wCommandRegister;
+    cmd.c.opcode = 0x08;
+    cmd.c.reportTypeID = power_state;
+    
+    return writeI2C(cmd.data, length);
+}
+
+IOReturn VoodooI2CHIDDevice::reset_dev(){
+    set_power(I2C_HID_PWR_ON);
+    
+    IOSleep(1);
+    
+    uint8_t length = 4;
+    
+    union command cmd;
+    cmd.c.reg = this->HIDDescriptor.wCommandRegister;
+    cmd.c.opcode = 0x01;
+    cmd.c.reportTypeID = 0;
+    
+    writeI2C(cmd.data, length);
+    return kIOReturnSuccess;
+}
+
+void VoodooI2CHIDDevice::get_input(OSObject* owner, IOTimerEventSource* sender) {
+    uint16_t maxLen = this->HIDDescriptor.wMaxInputLength;
+    
+    unsigned char* report = (unsigned char *)IOMalloc(maxLen);
+    
+    readI2C(report, maxLen);
+    
+    int return_size = report[0] | report[1] << 8;
+    if (return_size == 0) {
+        IOLog("%s::0 sized report!\n", getName());
+        this->IsReading = false;
+        return;
+    }
+    
+    if (return_size > maxLen) {
+        IOLog("%s: Incomplete report %d/%d\n", getName(), maxLen, return_size);
+        this->IsReading = false;
+        return;
+    }
+    
+    
+    IOBufferMemoryDescriptor *buffer = IOBufferMemoryDescriptor::inTaskWithOptions(kernel_task, 0, return_size);
+    buffer->writeBytes(0, report + 2, return_size - 2);
+    
+    IOReturn err = this->wrapper->handleReport(buffer, kIOHIDReportTypeInput);
+    if (err != kIOReturnSuccess)
+        IOLog("%s::Error handling report: 0x%.8x\n", getName(), err);
+    
+    buffer->release();
+    
+    IOFree(report, maxLen);
+    this->IsReading = false;
+}
+
+static void i2c_hid_readReport(VoodooI2CHIDDevice *device){
+    device->get_input(NULL, NULL);
+}
+
+void VoodooI2CHIDDevice::InterruptOccured(OSObject* owner, IOInterruptEventSource* src, int intCount){
+    if (this->IsReading)
+        return;
+    if (!this->DeviceIsAwake)
+        return;
+    
+    this->IsReading = true;
+    
+    thread_t newThread;
+    kern_return_t kr = kernel_thread_start((thread_continue_t)i2c_hid_readReport, this, &newThread);
+    if (kr != KERN_SUCCESS){
+        this->IsReading = false;
+        IOLog("%s::Thread error!\n", getName());
+    } else {
+        thread_deallocate(newThread);
+    }
+    
 }

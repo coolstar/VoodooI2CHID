@@ -37,6 +37,7 @@ class VoodooI2CHIDDevice : public IOService
 private:
     VoodooI2CControllerDriver *i2cController;
     IOService *provider;
+    IOInterruptEventSource *interruptSource;
     
     VoodooI2CHIDDeviceWrapper *wrapper;
     
@@ -58,6 +59,9 @@ private:
     IOReturn fetchHIDDescriptor();
     IOReturn fetchReportDescriptor();
     
+    IOReturn set_power(int power_state);
+    IOReturn reset_dev();
+    
 public:
     UInt8 *ReportDesc;
     UInt16 ReportDescLength;
@@ -67,6 +71,9 @@ public:
     virtual bool start(IOService *provider) override;
     virtual void stop(IOService *provider) override;
     virtual IOReturn setPowerState(unsigned long powerState, IOService *whatDevice) override;
+    
+    void get_input(OSObject* owner, IOTimerEventSource* sender);
+    void InterruptOccured(OSObject* owner, IOInterruptEventSource* src, int intCount);
 };
 
 #endif /* VoodooI2CHIDDevice_hpp */
