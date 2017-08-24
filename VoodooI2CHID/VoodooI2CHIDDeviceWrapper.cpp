@@ -22,7 +22,6 @@ bool VoodooI2CHIDDeviceWrapper::start(IOService *provider) {
 }
 
 IOReturn VoodooI2CHIDDeviceWrapper::newReportDescriptor(IOMemoryDescriptor **descriptor) const {
-    IOLog("%s::Requested HID Descriptor\n", getName());
     if (this->provider->ReportDescLength == 0)
         return kIOReturnDeviceError;
     
@@ -30,9 +29,22 @@ IOReturn VoodooI2CHIDDeviceWrapper::newReportDescriptor(IOMemoryDescriptor **des
     if (!buffer)
         return kIOReturnNoResources;
     buffer->writeBytes(0, this->provider->ReportDesc, this->provider->ReportDescLength);
-    IOLog("%s::Write %d bytes into buffer\n", getName(), this->provider->ReportDescLength);
     *descriptor = buffer;
     return kIOReturnSuccess;
+}
+
+IOReturn VoodooI2CHIDDeviceWrapper::setReport(IOMemoryDescriptor *report, IOHIDReportType reportType, IOOptionBits options){
+    if (!report)
+        return kIOReturnBadArgument;
+    
+    UInt8 reportID = options & 0xff;
+    
+    vm_size_t sz = report->getLength();
+    UInt8 *buf = (UInt8 *)IOMalloc(sz);
+    report->readBytes(0, buf, sz);
+    IOReturn ret = provider->setReport(reportID, reportType, buf, report->getLength());
+    IOFree(buf, sz);
+    return ret;
 }
 
 OSNumber* VoodooI2CHIDDeviceWrapper::newVendorIDNumber() const {

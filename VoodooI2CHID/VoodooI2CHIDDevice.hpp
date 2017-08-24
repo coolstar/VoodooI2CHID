@@ -11,23 +11,24 @@
 
 #include <IOKit/IOService.h>
 #include <IOKit/acpi/IOACPIPlatformDevice.h>
+#include <IOKit/hid/IOHIDDevice.h>
 #include "VoodooI2CControllerDriver.hpp"
 
 struct __attribute__((__packed__)) i2c_hid_descr {
-    uint16_t wHIDDescLength;
-    uint16_t bcdVersion;
-    uint16_t wReportDescLength;
-    uint16_t wReportDescRegister;
-    uint16_t wInputRegister;
-    uint16_t wMaxInputLength;
-    uint16_t wOutputRegister;
-    uint16_t wMaxOutputLength;
-    uint16_t wCommandRegister;
-    uint16_t wDataRegister;
-    uint16_t wVendorID;
-    uint16_t wProductID;
-    uint16_t wVersionID;
-    uint32_t reserved;
+    UInt16 wHIDDescLength;
+    UInt16 bcdVersion;
+    UInt16 wReportDescLength;
+    UInt16 wReportDescRegister;
+    UInt16 wInputRegister;
+    UInt16 wMaxInputLength;
+    UInt16 wOutputRegister;
+    UInt16 wMaxOutputLength;
+    UInt16 wCommandRegister;
+    UInt16 wDataRegister;
+    UInt16 wVendorID;
+    UInt16 wProductID;
+    UInt16 wVersionID;
+    UInt32 reserved;
 };
 
 class VoodooI2CHIDDeviceWrapper;
@@ -73,6 +74,9 @@ public:
     virtual IOReturn setPowerState(unsigned long powerState, IOService *whatDevice) override;
     
     void get_input(OSObject* owner, IOTimerEventSource* sender);
+    
+    IOReturn setReport(UInt8 reportID, IOHIDReportType reportType, UInt8 *buf, UInt16 buf_len);
+    
     void InterruptOccured(OSObject* owner, IOInterruptEventSource* src, int intCount);
 };
 

@@ -19,6 +19,7 @@ public:
     virtual bool start(IOService *provider) override;
     
     virtual IOReturn newReportDescriptor(IOMemoryDescriptor **descriptor) const override;
+    virtual IOReturn setReport(IOMemoryDescriptor *report, IOHIDReportType reportType, IOOptionBits options) override;
     virtual OSNumber* newVendorIDNumber() const override;
     virtual OSNumber* newProductIDNumber() const override;
     virtual OSNumber* newVersionNumber() const override;

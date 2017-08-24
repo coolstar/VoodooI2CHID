@@ -16,17 +16,17 @@
 #define I2C_HID_PWR_SLEEP 0x01
 
 union command {
-    uint8_t data[4];
+    UInt8 data[4];
     struct __attribute__((__packed__)) cmd {
-        uint16_t reg;
-        uint8_t reportTypeID;
-        uint8_t opcode;
+        UInt16 reg;
+        UInt8 reportTypeID;
+        UInt8 opcode;
     } c;
 };
 
 struct __attribute__((__packed__))  i2c_hid_cmd {
     unsigned int registerIndex;
-    uint8_t opcode;
+    UInt8 opcode;
     unsigned int length;
     bool wait;
 };
@@ -338,7 +338,7 @@ IOReturn VoodooI2CHIDDevice::fetchReportDescriptor(){
     if (this->ReportDescLength != 0)
         return kIOReturnSuccess;
     this->ReportDescLength = this->HIDDescriptor.wReportDescLength;
-    uint8_t length = 2;
+    UInt8 length = 2;
     
     union command cmd;
     cmd.c.reg = this->HIDDescriptor.wReportDescRegister;
@@ -378,8 +378,65 @@ IOReturn VoodooI2CHIDDevice::reset_dev(){
     return kIOReturnSuccess;
 }
 
+IOReturn VoodooI2CHIDDevice::setReport(UInt8 reportID, IOHIDReportType reportType, UInt8 *buf, UInt16 buf_len){
+    if (reportType != kIOHIDReportTypeFeature && reportType != kIOHIDReportTypeOutput)
+        return kIOReturnBadArgument;
+    
+    UInt16 dataReg = this->HIDDescriptor.wDataRegister;
+    
+    UInt8 rawReportType = (reportType == kIOHIDReportTypeFeature) ? 0x03 : 0x02;
+    
+    UInt8 idx = 0;
+    
+    UInt16 size;
+    UInt16 args_len;
+    
+    size = 2 +
+    (reportID ? 1 : 0)	/* reportID */ +
+    buf_len		/* buf */;
+    args_len = (reportID >= 0x0F ? 1 : 0) /* optional third byte */ +
+    2			/* dataRegister */ +
+    size			/* args */;
+    
+    uint8_t *args = (uint8_t *)IOMalloc(args_len);
+    memset(args, 0, args_len);
+    
+    if (reportID >= 0x0F) {
+        args[idx++] = reportID;
+        reportID = 0x0F;
+    }
+    
+    args[idx++] = dataReg & 0xFF;
+    args[idx++] = dataReg >> 8;
+    
+    args[idx++] = size & 0xFF;
+    args[idx++] = size >> 8;
+    
+    if (reportID)
+        args[idx++] = reportID;
+    
+    memcpy(&args[idx], buf, buf_len);
+    
+    uint8_t len = 4;
+    union command *cmd = (union command *)IOMalloc(4 + args_len);
+    memset(cmd, 0, 4+args_len);
+    cmd->c.reg = this->HIDDescriptor.wCommandRegister;
+    cmd->c.opcode = 0x03;
+    cmd->c.reportTypeID = reportID | rawReportType << 4;
+    
+    uint8_t *rawCmd = (uint8_t *)cmd;
+    
+    memcpy(rawCmd + len, args, args_len);
+    len += args_len;
+    IOReturn ret = writeI2C(rawCmd, len);
+    
+    IOFree(cmd, 4+args_len);
+    IOFree(args, args_len);
+    return ret;
+}
+
 void VoodooI2CHIDDevice::get_input(OSObject* owner, IOTimerEventSource* sender) {
-    uint16_t maxLen = this->HIDDescriptor.wMaxInputLength;
+    UInt16 maxLen = this->HIDDescriptor.wMaxInputLength;
     
     unsigned char* report = (unsigned char *)IOMalloc(maxLen);
     
